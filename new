@@ -1,0 +1,130 @@
+import argparse
+import os
+from typing import List, Tuple
+from PIL import Image
+import torch
+from torchvision import transforms
+import torchvision.models.detection as detection
+from transformers import pipeline
+
+# Define the list of COCO instance category names
+COCO_INSTANCE_CATEGORY_NAMES = [
+    '__background__', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
+    'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'N/A', 'stop sign',
+    'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
+    'elephant', 'bear', 'zebra', 'giraffe', 'N/A', 'backpack', 'umbrella', 'N/A', 'N/A',
+    'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball',
+    'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
+    'bottle', 'N/A', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',
+    'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza',
+    'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'N/A', 'dining table',
+    'N/A', 'N/A', 'toilet', 'N/A', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
+    'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'N/A', 'book',
+    'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
+]
+
+
+# Object Detection Module
+def load_detection_model():
+    model = detection.fasterrcnn_resnet50_fpn(pretrained=True)
+    model.eval()
+    return model
+
+def detect_objects(image: Image.Image, model, threshold: float = 0.5) -> List[Tuple[str, float]]:
+    transform = transforms.Compose([transforms.ToTensor()])
+    image_tensor = transform(image).unsqueeze(0)
+    with torch.no_grad():
+        outputs = model(image_tensor)[0]
+
+    labels = outputs['labels']
+    scores = outputs['scores']
+    detected = [(COCO_INSTANCE_CATEGORY_NAMES[label], float(score))
+                for label, score in zip(labels, scores) if score >= threshold]
+    return detected
+
+
+# LLM Integration Module
+def load_llm_pipeline():
+    # Consider adding a check for available memory/GPU for larger models
+    try:
+        return pipeline("text-generation", model="gpt2-medium")
+    except Exception as e:
+        print(f"Error loading LLM model: {e}")
+        # Fallback or alternative handling
+        return None # Or raise the exception
+
+def generate_text(prompt: str, objects: List[Tuple[str, float]], llm_pipeline) -> str:
+    if llm_pipeline is None:
+        return "LLM model not loaded."
+
+    # Check if objects is None before attempting to iterate
+    if objects is None:
+        object_list = "No objects detected."
+    else:
+        object_list = ", ".join([f"{name} ({score:.2f})" for name, score in objects])
+
+    full_prompt = f"Objects detected: {object_list}. {prompt}"
+    try:
+        response = llm_pipeline(full_prompt, max_length=100, num_return_sequences=1)
+        return response[0]['generated_text']
+    except Exception as e:
+        print(f"Error during text generation: {e}")
+        return "Error generating text."
+
+
+# Utility Functions
+def is_valid_image(path: str) -> bool:
+    try:
+        # Check if the path exists and is a file
+        if not os.path.isfile(path):
+            return False
+        Image.open(path).verify()
+        return True
+    except Exception:
+        return False
+
+# Main Application
+def main(image_path: str, user_prompt: str):
+    if not os.path.exists(image_path) or not is_valid_image(image_path):
+        print("Invalid image file. Please provide a valid image path.")
+        return
+
+    try:
+        image = Image.open(image_path).convert("RGB")
+    except Exception as e:
+        print(f"Error opening image file: {e}")
+        return
+
+    print("Loading models...")
+    detection_model = load_detection_model()
+    llm = load_llm_pipeline()
+
+    print("Detecting objects...")
+    # objects will now be a list or an empty list, not None
+    objects = detect_objects(image, detection_model)
+    print("Objects Detected:")
+    if objects:
+        for name, score in objects:
+            print(f"- {name}: {score:.2f}")
+    else:
+        print("No objects detected.")
+
+
+    print("\nGenerating response...")
+    response = generate_text(user_prompt, objects, llm)
+    print("\nGenerated Text:")
+    print(response)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Object Detection + LLM Prompting")
+    parser.add_argument("--image", required=True, help="Path to the image file")
+    parser.add_argument("--prompt", required=True, help="User prompt for text generation")
+
+    
+    try:
+        args = parser.parse_args(["--image", "/content/IMG_0297.JPG", "--prompt", "Describe the scene."])
+        main(args.image, args.prompt)
+    except SystemExit as e:
+        # Catch SystemExit which happens if parse_args fails
+        print(f"Argument parsing failed: {e}")
+        print("Please provide '--image' and '--prompt' arguments in the list passed to parser.parse_args().")
