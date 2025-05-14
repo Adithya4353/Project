@@ -8,8 +8,8 @@ This project integrates computer vision and natural language generation. It dete
 
  What This Project Does
 
-1. Loads an image** provided by the user.
-2. Detects objects** in the image using `Faster R-CNN` trained on the COCO dataset.
+1. Loads an image provided by the user.
+2. Detects objects in the image using `Faster R-CNN` trained on the COCO dataset.
 3. Generates a description** using the `GPT-2` language model, based on the detected objects and a user-provided prompt.
 
 This makes it useful for:
