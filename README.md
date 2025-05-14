@@ -74,10 +74,16 @@ gpt2-medium generates up to 100 tokens of continuation based on the input.
 
 
 🔹 Step 8: Output
-The script prints:
 
-Detected objects (with confidence).
 
-The generated text output.
+Setup Instructions:
+1. Clone the repository
+
+2. Create and activate a virtual environment (recommended)
+
+3. Install dependencies
+
+pip install torch torchvision transformers pillow
+
 
 
